@@ -33,8 +33,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     doc = update.message.document
-    if not doc.file_name.lower().endswith((".epub", ".pdf")):
-        return
+if not doc.file_name.lower().endswith((".epub", ".pdf", ".docx")):
+    return
 
     index = load_index()
     name = doc.file_name
@@ -55,13 +55,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         warning = await context.bot.send_message(
             chat_id=chat_id,
-            text=f"⚠️ *DUPLICAT DETECTAT*\n\nFișierul `{name}` există deja.\n"
-                 f"👉 Îl poți găsi aici: {original_link}\n\n_(Acest mesaj va fi șters în 3 minute)_",
+            text=f"⚠️ *CARTE DEJA POSTATĂ*\n\nFișierul `{name}` există deja.\n"
+                 f"👉 O poți găsi aici: {original_link}\n\n_(Acest mesaj va fi șters în 5 minute)_",
             parse_mode="Markdown"
         )
         
-        # Programăm ștergerea mesajului de avertizare peste 180 de secunde (fără a bloca botul)
-        context.job_queue.run_once(delete_message_job, 180, chat_id=chat_id, data=warning.message_id)
+        # Programăm ștergerea mesajului de avertizare peste 300 de secunde (fără a bloca botul)
+        context.job_queue.run_once(delete_message_job, 300, chat_id=chat_id, data=warning.message_id)
     else:
         index[name] = msg_id
         save_index(index)
@@ -71,7 +71,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     if not context.args:
-        await update.message.reply_text("Te rog scrie: /search [titlu]")
+        await update.message.reply_text("Te rog scrie: /cauta [titlu]")
         return
 
     query = " ".join(context.args).lower()
@@ -93,7 +93,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Inițializare aplicație cu suport pentru JobQueue (necesar pentru ștergerea programată)
 app = ApplicationBuilder().token(TOKEN).build()
 
-app.add_handler(CommandHandler("search", search))
+app.add_handler(CommandHandler("cauta", search))
 app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 
 # Pornire bot
