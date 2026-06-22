@@ -6,54 +6,48 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 TOKEN = os.environ.get("BOT_TOKEN")
 INDEX_FILE = "books.json"
 
-# ID-ul real al canalului tău arhivă
-ID_CANAL_ARHIVA = -1002597093808  
+def load_index():
+    if os.path.exists(INDEX_FILE):
+        with open(INDEX_FILE, "r", encoding="utf-8") as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {}
+    return {}
 
-# Funcția CAUTA: caută în books.json și REPOSTEAZĂ fișierul direct în chat
+# Funcția CAUTA revizuită: generează link-uri albastre către mesaje, exact cum era la început
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
-
+        
     if not context.args:
-        await update.message.reply_text("Te rog scrie și titlul cărții. Exemplu: /cauta Nume Carte")
+        await update.message.reply_text("Te rog scrie: /cauta [titlu sau autor]")
         return
 
-    titlu_cautat = " ".join(context.args).strip().lower()
+    query = " ".join(context.args).lower()
+    index = load_index()
+    chat_id = update.message.chat_id
     
-    if os.path.exists(INDEX_FILE):
-        with open(INDEX_FILE, 'r', encoding='utf-8') as f:
-            biblioteca = json.load(f)
+    # Căutăm toate cărțile care conțin textul căutat
+    results = [name for name in index if query in name.lower()]
+    
+    if results:
+        # Curățăm ID-ul chat-ului pentru a genera link-uri interne corecte de tip t.me/c/
+        clean_chat_id = str(chat_id).replace("-100", "")
+        text = "📚 *Cărți găsite în bibliotecă:*\n\n"
         
-        id_mesaj_arhiva = None
-        nume_real_carte = None
-        
-        # Căutăm cartea în biblioteca salvată
-        for nume_carte, id_mesaj in biblioteca.items():
-            if titlu_cautat in nume_carte.lower():
-                id_mesaj_arhiva = id_mesaj
-                nume_real_carte = nume_carte
-                break
-        
-        if id_mesaj_arhiva:
-            await update.message.reply_text(f"Am găsit! Trimit acum: {nume_real_carte}... 📚")
-            try:
-                # Botul ia fișierul din canalul arhivă și îl trimite direct pe grup
-                await context.bot.forward_message(
-                    chat_id=update.effective_chat.id,
-                    from_chat_id=ID_CANAL_ARHIVA,
-                    message_id=id_mesaj_arhiva
-                )
-            except Exception as e:
-                await update.message.reply_text("Ups, a apărut o eroare la repostarea cărții. Asigură-te că botul este administrator în canalul arhivă.")
-        else:
-            await update.message.reply_text("❌ Nu am găsit această carte în bibliotecă. Verifică dacă ai scris numele corect!")
+        for name in results[:5]:  # Afișează primele 5 rezultate găsite
+            link = f"https://t.me/c/{clean_chat_id}/{index[name]}"
+            text += f"• [{name}]({link})\n"
+            
+        await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True)
     else:
-        await update.message.reply_text("Baza de date cu cărți nu este disponibilă momentan.")
+        await update.message.reply_text("❌ Nu am găsit nicio carte cu acel titlu în bibliotecă.")
 
-# Inițializare aplicație simplificată (fără JobQueue și fără scanare documente)
+# Inițializare aplicație în modul clasic și curat
 app = ApplicationBuilder().token(TOKEN).build()
 
-# Înregistrare singurei comenzi necesare
+# Înregistrare comandă
 app.add_handler(CommandHandler("cauta", search))
 
 # Pornire bot
