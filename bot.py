@@ -7,8 +7,8 @@ from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, fil
 TOKEN = os.environ.get("BOT_TOKEN")
 INDEX_FILE = "books.json"
 
-# ID-ul canalului tău arhivă (folosit doar la comanda /cauta pentru repostare fișier)
-ID_CANAL_ARHIVA = -1004470118642  
+# ID-ul TĂU REAL al canalului arhivă extras din link-ul trimis
+ID_CANAL_ARHIVA = -1002597093808  
 
 def load_index():
     if os.path.exists(INDEX_FILE):
@@ -23,7 +23,7 @@ def save_index(index):
     with open(INDEX_FILE, "w", encoding="utf-8") as f:
         json.dump(index, f, ensure_ascii=False, indent=2)
 
-# Funcție secundară care rulează în fundal pentru a șterge mesajul după 5 minute
+# Funcție secundară pentru ștergerea mesajului după 5 minute
 async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
     try:
@@ -44,26 +44,26 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     msg_id = update.message.message_id
 
-    # Verificăm dacă fișierul a mai fost postat pe acest grup
+    # Dacă fișierul există deja în baza de date (books.json)
     if name in index:
         try:
             await update.message.delete()
         except Exception:
             pass 
 
-        # Generăm linkul exact către mesajul deja existent pe acest grup
-        clean_chat_id = str(chat_id).replace("-100", "")
-        original_link = f"https://t.me/c/{clean_chat_id}/{index[name]}"
+        # Generăm link-ul corect către canalul arhivă folosind ID-ul tău real
+        clean_archive_id = str(ID_CANAL_ARHIVA).replace("-100", "")
+        original_link = f"https://t.me/c/{clean_archive_id}/{index[name]}"
         
         warning = await context.bot.send_message(
             chat_id=chat_id,
-            text=f"⚠️ *CARTE DEJA POSTATĂ*\n\nFișierul `{name}` există deja pe acest grup.\n"
-                 f"👉 O poți găsi direct aici: {original_link}\n\n_(Acest mesaj va fi șters în 5 minute)_",
+            text=f"⚠️ *CARTE DEJA POSTATĂ*\n\nFișierul `{name}` există deja în bibliotecă.\n"
+                 f"👉 O poți accesa și descărca direct din arhivă aici: {original_link}\n\n_(Acest mesaj va fi șters în 5 minute)_",
             parse_mode="Markdown"
         )
         context.job_queue.run_once(delete_message_job, 300, chat_id=chat_id, data=warning.message_id)
     else:
-        # Fișierul e nou pe grup: salvăm numele lui și ID-ul mesajului curent din grup
+        # Dacă este trimisă o carte nouă direct pe grup, o salvăm cu ID-ul mesajului de pe grup
         index[name] = msg_id
         save_index(index)
 
@@ -87,7 +87,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         for nume_carte, id_mesaj in biblioteca.items():
             if titlu_cautat in nume_carte.lower():
-                # Pentru că fișierele din scanarea inițială au ID-uri de arhivă, le va reposta de acolo
                 id_mesaj_arhiva = id_mesaj
                 nume_real_carte = nume_carte
                 break
@@ -101,7 +100,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     message_id=id_mesaj_arhiva
                 )
             except Exception as e:
-                await update.message.reply_text("Ups, a apărut o eroare la repostarea cărții.")
+                await update.message.reply_text("Ups, a apărut o eroare la repostarea cărții. Asigură-te că botul este administrator în canalul arhivă.")
         else:
             await update.message.reply_text("❌ Nu am găsit această carte în bibliotecă. Verifică dacă ai scris numele corect!")
     else:
@@ -110,7 +109,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Inițializare aplicație
 app = ApplicationBuilder().token(TOKEN).build()
 
-# Înregistrare comenzi
+# Enregistrare comenzi
 app.add_handler(CommandHandler("cauta", search))
 app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 
