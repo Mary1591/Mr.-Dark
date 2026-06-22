@@ -1,3 +1,4 @@
+
 import json
 import os
 import asyncio
@@ -30,7 +31,7 @@ async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.delete_message(chat_id=job.chat_id, message_id=job.data)
     except Exception:
-        pass  # Dacă mesajul a fost deja șters manual, ignoră eroarea
+        pass
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.document:
@@ -46,13 +47,11 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg_id = update.message.message_id
 
     if name in index:
-        # Ștergem fișierul duplicat trimis de membru
         try:
             await update.message.delete()
         except Exception:
             pass 
 
-        # Generăm link-ul către postarea originală
         clean_chat_id = str(chat_id).replace("-100", "")
         original_link = f"https://t.me/c/{clean_chat_id}/{index[name]}"
         
@@ -62,44 +61,18 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                  f"👉 O poți găsi aici: {original_link}\n\n_(Acest mesaj va fi șters în 5 minute)_",
             parse_mode="Markdown"
         )
-        
-        # Programăm ștergerea mesajului după 300 de secunde
         context.job_queue.run_once(delete_message_job, 300, chat_id=chat_id, data=warning.message_id)
     else:
         index[name] = msg_id
         save_index(index)
 
+# Funcția CAUTA modificată: acum REPOSTEAZĂ fișierul direct în chat!
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
-        
-    if not context.args:
-        await update.message.reply_text("Te rog scrie: /cauta [titlu]")
-        return
-
-    query = " ".join(context.args).lower()
-    index = load_index()
-    chat_id = update.message.chat_id
-    
-    results = [name for name in index if query in name.lower()]
-    
-    if results:
-        clean_chat_id = str(chat_id).replace("-100", "")
-        text = "📚 *Găsite:*\n"
-        for name in results[:5]:  # Afișează primele 5 rezultate
-            link = f"https://t.me/c/{clean_chat_id}/{index[name]}"
-            text += f"• [{name}]({link})\n"
-        await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True)
-    else:
-        await update.message.reply_text("❌ Nu am găsit nicio carte cu acel titlu.")
-
-# Funcția nouă care caută titlul în books.json și REPOSTEAZĂ fișierul direct în chat
-async def cauta_carte(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
 
     if not context.args:
-        await update.message.reply_text("Te rog scrie și titlul cărții. Exemplu: /carte Nume Carte")
+        await update.message.reply_text("Te rog scrie și titlul cărții. Exemplu: /cauta Nume Carte")
         return
 
     titlu_cautat = " ".join(context.args).strip().lower()
@@ -111,7 +84,7 @@ async def cauta_carte(update: Update, context: ContextTypes.DEFAULT_TYPE):
         id_mesaj_arhiva = None
         nume_real_carte = None
         
-        # Căutăm cartea în fișier (fără să conteze literele mari/mici)
+        # Căutăm cartea în fișier
         for nume_carte, id_mesaj in biblioteca.items():
             if titlu_cautat in nume_carte.lower():
                 id_mesaj_arhiva = id_mesaj
@@ -121,7 +94,7 @@ async def cauta_carte(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if id_mesaj_arhiva:
             await update.message.reply_text(f"Am găsit! Trimit acum: {nume_real_carte}... 📚")
             try:
-                # Botul ia mesajul/fișierul din canalul arhivă și îl repostează în grupul unde a fost cerut
+                # Botul ia fișierul din canalul arhivă și îl trimite direct pe grup
                 await context.bot.forward_message(
                     chat_id=update.effective_chat.id,
                     from_chat_id=ID_CANAL_ARHIVA,
@@ -130,7 +103,7 @@ async def cauta_carte(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 await update.message.reply_text("Ups, a apărut o eroare la repostarea cărții. Asigură-te că botul este administrator în canalul arhivă.")
         else:
-            await update.message.reply_text("Nu am găsit această carte în bibliotecă. Verifică dacă ai scris numele corect!")
+            await update.message.reply_text("❌ Nu am găsit această carte în bibliotecă. Verifică dacă ai scris numele corect!")
     else:
         await update.message.reply_text("Baza de date cu cărți nu este disponibilă momentan.")
 
@@ -139,7 +112,6 @@ app = ApplicationBuilder().token(TOKEN).build()
 
 # Înregistrare comenzi
 app.add_handler(CommandHandler("cauta", search))
-app.add_handler(CommandHandler("carte", cauta_carte))
 app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 
 # Pornire bot
