@@ -1,4 +1,3 @@
-
 import json
 import os
 import asyncio
@@ -8,8 +7,7 @@ from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, fil
 TOKEN = os.environ.get("BOT_TOKEN")
 INDEX_FILE = "books.json"
 
-# ID-ul canalului tău arhivă (unde sunt stocate cărțile mutate de scanner)
-# Schimbă acest număr cu cel real dacă este diferit!
+# ID-ul canalului tău arhivă (folosit doar la comanda /cauta pentru repostare fișier)
 ID_CANAL_ARHIVA = -1004470118642  
 
 def load_index():
@@ -46,27 +44,30 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     msg_id = update.message.message_id
 
+    # Verificăm dacă fișierul a mai fost postat pe acest grup
     if name in index:
         try:
             await update.message.delete()
         except Exception:
             pass 
 
+        # Generăm linkul exact către mesajul deja existent pe acest grup
         clean_chat_id = str(chat_id).replace("-100", "")
         original_link = f"https://t.me/c/{clean_chat_id}/{index[name]}"
         
         warning = await context.bot.send_message(
             chat_id=chat_id,
-            text=f"⚠️ *CARTE DEJA POSTATĂ*\n\nFișierul `{name}` există deja.\n"
-                 f"👉 O poți găsi aici: {original_link}\n\n_(Acest mesaj va fi șters în 5 minute)_",
+            text=f"⚠️ *CARTE DEJA POSTATĂ*\n\nFișierul `{name}` există deja pe acest grup.\n"
+                 f"👉 O poți găsi direct aici: {original_link}\n\n_(Acest mesaj va fi șters în 5 minute)_",
             parse_mode="Markdown"
         )
         context.job_queue.run_once(delete_message_job, 300, chat_id=chat_id, data=warning.message_id)
     else:
+        # Fișierul e nou pe grup: salvăm numele lui și ID-ul mesajului curent din grup
         index[name] = msg_id
         save_index(index)
 
-# Funcția CAUTA modificată: acum REPOSTEAZĂ fișierul direct în chat!
+# Funcția CAUTA: caută în books.json și REPOSTEAZĂ fișierul direct în chat
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -84,9 +85,9 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         id_mesaj_arhiva = None
         nume_real_carte = None
         
-        # Căutăm cartea în fișier
         for nume_carte, id_mesaj in biblioteca.items():
             if titlu_cautat in nume_carte.lower():
+                # Pentru că fișierele din scanarea inițială au ID-uri de arhivă, le va reposta de acolo
                 id_mesaj_arhiva = id_mesaj
                 nume_real_carte = nume_carte
                 break
@@ -94,14 +95,13 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if id_mesaj_arhiva:
             await update.message.reply_text(f"Am găsit! Trimit acum: {nume_real_carte}... 📚")
             try:
-                # Botul ia fișierul din canalul arhivă și îl trimite direct pe grup
                 await context.bot.forward_message(
                     chat_id=update.effective_chat.id,
                     from_chat_id=ID_CANAL_ARHIVA,
                     message_id=id_mesaj_arhiva
                 )
             except Exception as e:
-                await update.message.reply_text("Ups, a apărut o eroare la repostarea cărții. Asigură-te că botul este administrator în canalul arhivă.")
+                await update.message.reply_text("Ups, a apărut o eroare la repostarea cărții.")
         else:
             await update.message.reply_text("❌ Nu am găsit această carte în bibliotecă. Verifică dacă ai scris numele corect!")
     else:
