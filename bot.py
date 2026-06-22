@@ -19,29 +19,28 @@ def save_index(index):
     with open(INDEX_FILE, "w", encoding="utf-8") as f:
         json.dump(index, f, ensure_ascii=False, indent=2)
 
-# Funcția corectată pentru scanarea istoricului grupului
+# Funcția REPARATĂ COMPLET pentru scanarea istoricului
 async def scaneaza_grup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_member = await context.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
     if chat_member.status not in ['creator', 'administrator']:
         await update.message.reply_text("Doar administratorii pot rula această comandă.")
         return
 
-    status_msg = await update.message.reply_text("🔄 Pornesc scanarea grupului pentru a citi fișierele existente... Te rog așteaptă.")
+    status_msg = await update.message.reply_text("🔄 Pornesc scanarea grupului pentru a citi fișierele... Te rog așteaptă.")
     index = load_index()
     numar_carti_gasite = 0
     
-    offset_id = 0
-    limit = 100  # Luăm câte 100 de mesaje o dată
+    offset_id = None
+    limit = 100
     total_scanned = 0
-    max_messages = 3000  # Scanăm ultimele 3000 de mesaje din grup
+    max_messages = 3000  
 
     try:
         while total_scanned < max_messages:
-            # Metoda corectă pentru librăria ta:
-            messages = await context.bot.get_chat_history(
-                chat_id=update.effective_chat.id, 
+            # REPARARE: get_chat_history se apelează de pe update.effective_chat!
+            messages = await update.effective_chat.get_chat_history(
                 limit=limit,
-                offset_id=offset_id if offset_id > 0 else None
+                offset_id=offset_id
             )
             
             if not messages:
