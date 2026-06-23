@@ -7,7 +7,7 @@ TOKEN = os.environ.get("BOT_TOKEN")
 INDEX_FILE = "books.json"
 
 # ID-ul grupului tău CEL MARE (îl vom schimba când îl aflăm, momentan lăsăm 0)
-ID_GRUP_MARE = 0  
+ID_GRUP_MARE = 1957960999  
 
 def load_index():
     if os.path.exists(INDEX_FILE):
