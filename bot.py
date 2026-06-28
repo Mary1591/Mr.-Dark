@@ -16,8 +16,8 @@ def load_index():
             try:
                 return json.load(f)
             except json.JSONDecodeError:
-                return {}
-    return {}
+                return []
+    return []
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
@@ -30,30 +30,36 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     index = load_index()
     results = []
 
-    # Verificăm cum este structurat books.json și căutăm corect
-    if isinstance(index, dict):
+    # Căutăm în noul format de listă trimis de Maria
+    if isinstance(index, list):
+        for item in index:
+            if isinstance(item, dict) and "title" in item:
+                book_title = item["title"]
+                msg_id = item.get("id", "0")
+                if query in book_title.lower():
+                    results.append((book_title, msg_id))
+                    
+    # Format de rezervă (în caz că indexul e dicționar)
+    elif isinstance(index, dict):
         for msg_id, data in index.items():
-            if isinstance(data, dict) and "name" in data:
-                # Formatul cel nou din scriptul de scanare
-                book_name = data["name"]
-                if query in book_name.lower():
-                    results.append((book_name, msg_id))
+            if isinstance(data, dict) and "title" in data:
+                book_title = data["title"]
+                if query in book_title.lower():
+                    results.append((book_title, msg_id))
+            elif isinstance(data, dict) and "name" in data:
+                book_title = data["name"]
+                if query in book_title.lower():
+                    results.append((book_title, msg_id))
             elif isinstance(data, str):
-                # Formatul vechi (dacă mai existau rămășițe)
                 if query in data.lower():
                     results.append((data, msg_id))
-    elif isinstance(index, list):
-        # Format simplu de listă
-        for item in index:
-            if isinstance(item, str) and query in item.lower():
-                results.append((item, "0"))
 
     if results:
         text = "📚 *Cărți găsite în bibliotecă:*\n\n"
-        # Afișăm primele 10 rezultate ca să ai o listă mai bogată
-        for name, msg_id in results[:10]:  
+        # Afișăm primele 10 rezultate găsite
+        for title, msg_id in results[:10]:  
             link = f"https://t.me/c/{ID_GRUP_MARE}/{msg_id}"
-            text += f"• [{name}]({link})\n"
+            text += f"• [{title}]({link})\n"
         await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True)
     else:
         await update.message.reply_text("❌ Nu am găsit nicio carte cu acest titlu în bibliotecă.")
