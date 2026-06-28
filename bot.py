@@ -1,5 +1,6 @@
 import json
 import os
+import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
@@ -56,12 +57,11 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if results:
         text = "📚 *Cărți găsite în bibliotecă:*\n\n"
-        # Am mărit aici la :30 ca să returneze mult mai multe rezultate odată!
+        # Returnăm primele 30 de rezultate ca să prindem toate variantele cărților vechi
         for title, msg_id in results[:30]:  
             link = f"https://t.me/c/{ID_GRUP_MARE}/{msg_id}"
             text += f"• [{title}]({link})\n"
             
-        # Dacă s-au găsit mai mult de 30, anunțăm fetele să fie mai specifice
         if len(results) > 30:
             text += f"\n⚠️ *S-au găsit în total {len(results)} rezultate. Specifică mai multe cuvinte dacă nu vezi cartea ta.*"
             
@@ -74,15 +74,33 @@ async def update_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.document:
         return
     
-    # Verificăm dacă cel care trimite a pus cheia secretă în descriere
     if context.args and context.args[0] == SECRET_KEY:
         file = await context.message.document.get_file()
         await file.download_to_drive(INDEX_FILE)
         await update.message.reply_text("✅ Baza de date a fost actualizată cu succes în privat!")
 
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("cauta", search))
-app.add_handler(CommandHandler("update_books", update_db))
+async def main():
+    # Creăm aplicația botului
+    app = ApplicationBuilder().token(TOKEN).build()
+    
+    # Adăugăm comenzile
+    app.add_handler(CommandHandler("cauta", search))
+    app.add_handler(CommandHandler("update_books", update_db))
+    
+    # TRUCUL MAGIC: Ștergem manual orice conexiune veche/agățată din serverul Telegram
+    print("Se curăță conexiunile vechi agățate în Telegram...")
+    await app.initialize()
+    await app.bot.delete_webhook(drop_pending_updates=True)
+    
+    # Pornim botul pe curat
+    print("Botul a pornit cu succes și este online!")
+    await app.updater.start_polling()
+    await app.start()
+    
+    # Îl menținem în viață pe server
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
-    app.run_polling()
+    # Rulăm funcția principală asincron
+    asyncio.run(main())
