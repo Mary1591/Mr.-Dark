@@ -1,6 +1,5 @@
 import json
 import os
-import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
@@ -31,7 +30,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     index = load_index()
     results = []
 
-    # Căutăm în formatul de listă trimis de Maria
     if isinstance(index, list):
         for item in index:
             if isinstance(item, dict) and "title" in item:
@@ -40,7 +38,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if query in book_title.lower():
                     results.append((book_title, msg_id))
                     
-    # Format de rezervă (în caz că indexul e dicționar)
     elif isinstance(index, dict):
         for msg_id, data in index.items():
             if isinstance(data, dict) and "title" in data:
@@ -57,7 +54,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if results:
         text = "📚 *Cărți găsite în bibliotecă:*\n\n"
-        # Returnăm primele 30 de rezultate ca să prindem toate variantele cărților vechi
         for title, msg_id in results[:30]:  
             link = f"https://t.me/c/{ID_GRUP_MARE}/{msg_id}"
             text += f"• [{title}]({link})\n"
@@ -69,7 +65,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Nu am găsit nicio carte cu acest titlu în bibliotecă.")
 
-# Comanda secretă prin care calculatorul tău va urca fișierul JSON direct în bot
 async def update_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.document:
         return
@@ -79,28 +74,14 @@ async def update_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await file.download_to_drive(INDEX_FILE)
         await update.message.reply_text("✅ Baza de date a fost actualizată cu succes în privat!")
 
-async def main():
-    # Creăm aplicația botului
+if __name__ == "__main__":
+    # Construim aplicația standard
     app = ApplicationBuilder().token(TOKEN).build()
     
     # Adăugăm comenzile
     app.add_handler(CommandHandler("cauta", search))
     app.add_handler(CommandHandler("update_books", update_db))
     
-    # TRUCUL MAGIC: Ștergem manual orice conexiune veche/agățată din serverul Telegram
-    print("Se curăță conexiunile vechi agățate în Telegram...")
-    await app.initialize()
-    await app.bot.delete_webhook(drop_pending_updates=True)
-    
-    # Pornim botul pe curat
-    print("Botul a pornit cu succes și este online!")
-    await app.updater.start_polling()
-    await app.start()
-    
-    # Îl menținem în viață pe server
-    while True:
-        await asyncio.sleep(3600)
-
-if __name__ == "__main__":
-    # Rulăm funcția principală asincron
-    asyncio.run(main())
+    # Pornim botul și îi spunem direct să șteargă orice update-uri/conexiuni vechi agățate (drop_pending_updates=True)
+    print("Botul pornește și curăță sesiunile vechi...")
+    app.run_polling(drop_pending_updates=True)
