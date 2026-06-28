@@ -28,12 +28,31 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = " ".join(context.args).lower()
     index = load_index()
-    results = [name for name in index if query in name.lower()]
-    
+    results = []
+
+    # Verificăm cum este structurat books.json și căutăm corect
+    if isinstance(index, dict):
+        for msg_id, data in index.items():
+            if isinstance(data, dict) and "name" in data:
+                # Formatul cel nou din scriptul de scanare
+                book_name = data["name"]
+                if query in book_name.lower():
+                    results.append((book_name, msg_id))
+            elif isinstance(data, str):
+                # Formatul vechi (dacă mai existau rămășițe)
+                if query in data.lower():
+                    results.append((data, msg_id))
+    elif isinstance(index, list):
+        # Format simplu de listă
+        for item in index:
+            if isinstance(item, str) and query in item.lower():
+                results.append((item, "0"))
+
     if results:
         text = "📚 *Cărți găsite în bibliotecă:*\n\n"
-        for name in results[:5]:  
-            link = f"https://t.me/c/{ID_GRUP_MARE}/{index[name]}"
+        # Afișăm primele 10 rezultate ca să ai o listă mai bogată
+        for name, msg_id in results[:10]:  
+            link = f"https://t.me/c/{ID_GRUP_MARE}/{msg_id}"
             text += f"• [{name}]({link})\n"
         await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True)
     else:
