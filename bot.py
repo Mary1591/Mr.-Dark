@@ -1,3 +1,24 @@
+import json
+import os
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+TOKEN = os.environ.get("BOT_TOKEN")
+INDEX_FILE = "books.json"
+ID_GRUP_MARE = 1957960999  
+
+# O cheie secretă aleasă de tine ca să nu poată altcineva să îți modifice lista
+SECRET_KEY = "maria_secret_key_2026" 
+
+def load_index():
+    if os.path.exists(INDEX_FILE):
+        with open(INDEX_FILE, "r", encoding="utf-8") as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return []
+    return []
+
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -16,7 +37,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 book_title = item["title"].lower()
                 msg_id = item.get("id", "0")
                 
-                # TRUCUL: Verificăm dacă ABSOLUT TOATE cuvintele căutate se află în titlu
+                # Verificăm dacă ABSOLUT TOATE cuvintele căutate se află în titlu
                 if all(word in book_title for word in search_words):
                     results.append((item["title"], msg_id))
                     
@@ -48,3 +69,20 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True)
     else:
         await update.message.reply_text("❌ Nu am găsit nicio carte care să conțină aceste cuvinte în bibliotecă.")
+
+async def update_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.document:
+        return
+    
+    if context.args and context.args[0] == SECRET_KEY:
+        file = await context.message.document.get_file()
+        await file.download_to_drive(INDEX_FILE)
+        await update.message.reply_text("✅ Baza de date a fost actualizată cu succes în privat!")
+
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("cauta", search))
+    app.add_handler(CommandHandler("update_books", update_db))
+    
+    print("Botul pornește și curăță sesiunile vechi...")
+    app.run_polling(drop_pending_updates=True)
