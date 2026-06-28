@@ -30,7 +30,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     index = load_index()
     results = []
 
-    # Căutăm în noul format de listă trimis de Maria
+    # Căutăm în formatul de listă trimis de Maria
     if isinstance(index, list):
         for item in index:
             if isinstance(item, dict) and "title" in item:
@@ -56,10 +56,15 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if results:
         text = "📚 *Cărți găsite în bibliotecă:*\n\n"
-        # Afișăm primele 10 rezultate găsite
-        for title, msg_id in results[:10]:  
+        # Am mărit aici la :30 ca să returneze mult mai multe rezultate odată!
+        for title, msg_id in results[:30]:  
             link = f"https://t.me/c/{ID_GRUP_MARE}/{msg_id}"
             text += f"• [{title}]({link})\n"
+            
+        # Dacă s-au găsit mai mult de 30, anunțăm fetele să fie mai specifice
+        if len(results) > 30:
+            text += f"\n⚠️ *S-au găsit în total {len(results)} rezultate. Specifică mai multe cuvinte dacă nu vezi cartea ta.*"
+            
         await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True)
     else:
         await update.message.reply_text("❌ Nu am găsit nicio carte cu acest titlu în bibliotecă.")
