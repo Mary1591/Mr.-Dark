@@ -119,7 +119,22 @@ if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("cauta", search))
     app.add_handler(CommandHandler("update_books", update_db))
-    app.add_handler(CallbackQueryHandler(button_click)) # Linia nouă care dă viață butoanelor
+    app.add_handler(CallbackQueryHandler(button_click))
     
-    print("Botul pornește și curăță sesiunile vechi...")
+    # --- REPARAREA RESTARTULUI ȘI A ERORILOR DE CONECTARE ---
+    # Închidem forțat orice sesiune veche blocată în serverele Telegram
+    import asyncio
+    async def pornire_curata():
+        await app.initialize()
+        await app.bot.delete_webhook(drop_pending_updates=True)
+        await app.shutdown()
+    
+    try:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(pornire_curata())
+    except Exception as e:
+        print(f"Avertisment curățare sesiune: {e}")
+    # --------------------------------------------------------
+
+    print("Botul pornește curat și fără erori de conectare...")
     app.run_polling(drop_pending_updates=True)
