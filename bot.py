@@ -64,13 +64,14 @@ def genereaza_pagina_text_si_butoane(results, pagina, query_text):
     return text, tastatura
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
+    if not update.message or not update.message.from_user:
         return
     if not context.args:
         await update.message.reply_text("Te rog scrie: /cauta [titlu sau autor]")
         return
 
     query_text = " ".join(context.args)
+    user_id = str(update.message.from_user.id)
     
     query_standard = curata_text_standard(query_text)
     search_words = [word for word in query_standard.split() if word]
@@ -86,19 +87,13 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title_standard = curata_text_standard(book_title)
         title_complet_legat = curata_text_complet(book_title)
         
-        # Dacă fetele caută un grup strict de litere legate (ex: crjane, jrdard)
-        # sau lungimea cuvântului căutat este foarte mică, lăsăm verificarea legată direct
         if len(query_complet_legat) > 1 and query_complet_legat in title_complet_legat:
-            # Totuși, dacă au căutat "ward", ne asigurăm că nu prinde "edwards" în titlul legat complet
-            # doar dacă "ward" este un cuvânt separat în titlul standard
             if query_complet_legat == "ward":
                 return bool(re.search(r'\bward\b', title_standard))
             return True
             
-        # Altfel, căutăm fiecare cuvânt în parte ca fiind cuvânt ÎNTREG în titlu
         if search_words:
             for word in search_words:
-                # Folosim \b pentru a izola cuvântul (să nu fie parte din edward/howard)
                 if not re.search(r'\b' + re.escape(word) + r'\b', title_standard):
                     return False
             return True
@@ -137,8 +132,14 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 vazute.add(m)
                 rezultate_unice.append((t, m))
 
-        context.user_data["ultimele_rezultate"] = rezultate_unice
-        context.user_data["text_cautat"] = query_text
+        # MODIFICARE MAJORĂ: Salvăm rezultatele separat, în funcție de ID-ul fiecărui utilizator în parte!
+        if "cautari_utilizatori" not in context.bot_data:
+            context.bot_data["cautari_utilizatori"] = {}
+            
+        context.bot_data["cautari_utilizatori"][user_id] = {
+            "rezultate": rezultate_unice,
+            "text": query_text
+        }
         
         text, tastatura = genereaza_pagina_text_si_butoane(rezultate_unice, 0, query_text)
         await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True, reply_markup=tastatura)
@@ -147,13 +148,23 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-
-    results = context.user_data.get("ultimele_rezultate")
-    query_text = context.user_data.get("text_cautat", "căutare")
-
-    if not results:
+    if not query or not query.from_user:
         return
+        
+    await query.answer()
+    user_id = str(query.from_user.id)
+
+    # Luăm datele din bot_data folosind ID-ul persoanei care a apăsat pe buton
+    cautari = context.bot_data.get("cautari_utilizatori", {})
+    date_utilizator = cautari.get(user_id)
+
+    if not date_utilizator:
+        # Dacă sesiunea a expirat sau userul dă click pe butonul altcuiva
+        await query.answer("⚠️ Te rog folosește comanda /cauta din nou pentru sesiunea ta.", show_alert=True)
+        return
+
+    results = date_utilizator["rezultate"]
+    query_text = date_utilizator["text"]
 
     if query.data.startswith("pag_"):
         pagina_noua = int(query.data.split("_")[1])
