@@ -20,7 +20,6 @@ def load_index():
     return []
 
 def curata_text_standard(text):
-    """Curăță caracterele speciale transformându-le în spații"""
     if not text:
         return ""
     text_lower = text.lower()
@@ -30,7 +29,6 @@ def curata_text_standard(text):
     return text_lower
 
 def curata_text_complet(text):
-    """Șterge complet punctele și spațiile pentru a potrivi inițialele lipite (ex: c.r.jane devine crjane)"""
     if not text:
         return ""
     text_lower = text.lower()
@@ -39,40 +37,8 @@ def curata_text_complet(text):
         text_lower = text_lower.replace(caracter, "")
     return text_lower
 
-def genereaza_pagina_text_si_butoane(results, pagina, query_text):
-    total_rezultate = len(results)
-    start_idx = pagina * CARTI_PER_PAGINA
-    end_idx = start_idx + CARTI_PER_PAGINA
-    lista_pagina = results[start_idx:end_idx]
-    
-    total_pagini = (total_rezultate + CARTI_PER_PAGINA - 1) // CARTI_PER_PAGINA
-
-    text = f"📚 *Cărți găsite pentru „{query_text}”:*\n"
-    text += f"📖 *Pagina {pagina + 1} din {total_pagini}* (Total cărți: {total_rezultate})\n\n"
-    
-    for title, msg_id in lista_pagina:
-        link = f"https://t.me/c/{ID_GRUP_MARE}/{msg_id}"
-        text += f"• [{title}]({link})\n"
-
-    butoane = []
-    if pagina > 0:
-        butoane.append(InlineKeyboardButton("⬅️ Înapoi", callback_data=f"pag_{pagina-1}"))
-    if end_idx < total_rezultate:
-        butoane.append(InlineKeyboardButton("Înainte ➡️", callback_data=f"pag_{pagina+1}"))
-
-    tastatura = InlineKeyboardMarkup([butoane]) if butoane else None
-    return text, tastatura
-
-async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.from_user:
-        return
-    if not context.args:
-        await update.message.reply_text("Te rog scrie: /cauta [titlu sau autor]")
-        return
-
-    query_text = " ".join(context.args)
-    user_id = str(update.message.from_user.id)
-    
+def executa_cautare(query_text):
+    """Funcție separată care caută în baza de date pe loc, de fiecare dată când se schimbă pagina"""
     query_standard = curata_text_standard(query_text)
     search_words = [word for word in query_standard.split() if word]
     query_complet_legat = curata_text_complet(query_text)
@@ -124,52 +90,80 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     results.append((data, msg_id))
 
-    if results:
-        rezultate_unice = []
-        vazute = set()
-        for t, m in results:
-            if m not in vazute:
-                vazute.add(m)
-                rezultate_unice.append((t, m))
-
-        # MODIFICARE MAJORĂ: Salvăm rezultatele separat, în funcție de ID-ul fiecărui utilizator în parte!
-        if "cautari_utilizatori" not in context.bot_data:
-            context.bot_data["cautari_utilizatori"] = {}
+    rezultate_unice = []
+    vazute = set()
+    for t, m in results:
+        if m not in vazute:
+            vazute.add(m)
+            rezultate_unice.append((t, m))
             
-        context.bot_data["cautari_utilizatori"][user_id] = {
-            "rezultate": rezultate_unice,
-            "text": query_text
-        }
-        
-        text, tastatura = genereaza_pagina_text_si_butoane(rezultate_unice, 0, query_text)
+    return rezultate_unice
+
+def genereaza_pagina_text_si_butoane(results, pagina, query_text):
+    total_rezultate = len(results)
+    start_idx = pagina * CARTI_PER_PAGINA
+    end_idx = start_idx + CARTI_PER_PAGINA
+    lista_pagina = results[start_idx:end_idx]
+    
+    total_pagini = (total_rezultate + CARTI_PER_PAGINA - 1) // CARTI_PER_PAGINA
+
+    text = f"📚 *Cărți găsite pentru „{query_text}”:*\n"
+    text += f"📖 *Pagina {pagina + 1} din {total_pagini}* (Total cărți: {total_rezultate})\n\n"
+    
+    for title, msg_id in lista_pagina:
+        link = f"https://t.me/c/{ID_GRUP_MARE}/{msg_id}"
+        text += f"• [{title}]({link})\n"
+
+    # Limităm textul salvat în buton ca să nu depășească limita Telegram (max 64 caractere în callback_data)
+    query_scurtat = query_text[:30]
+
+    butoane = []
+    if pagina > 0:
+        # Salvăm pagina și textul căutat direct în buton! zero memorie volatilă
+        butoane.append(InlineKeyboardButton("⬅️ Înapoi", callback_data=f"pag_{pagina-1}_{query_scurtat}"))
+    if end_idx < total_rezultate:
+        butoane.append(InlineKeyboardButton("Înainte ➡️", callback_data=f"pag_{pagina+1}_{query_scurtat}"))
+
+    tastatura = InlineKeyboardMarkup([butoane]) if butoane else None
+    return text, tastatura
+
+async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
+        return
+    if not context.args:
+        await update.message.reply_text("Te rog scrie: /cauta [titlu sau autor]")
+        return
+
+    query_text = " ".join(context.args)
+    results = executa_cautare(query_text)
+
+    if results:
+        text, tastatura = genereaza_pagina_text_si_butoane(results, 0, query_text)
         await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True, reply_markup=tastatura)
     else:
         await update.message.reply_text(f"❌ Nu am găsit nicio carte care să conțină „{query_text}” în bibliotecă.")
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if not query or not query.from_user:
+    if not query:
         return
         
     await query.answer()
-    user_id = str(query.from_user.id)
 
-    # Luăm datele din bot_data folosind ID-ul persoanei care a apăsat pe buton
-    cautari = context.bot_data.get("cautari_utilizatori", {})
-    date_utilizator = cautari.get(user_id)
+    # Despicăm comanda butonului: ex. pag_1_ward
+    parts = query.data.split("_")
+    
+    if len(parts) >= 3 and parts[0] == "pag":
+        pagina_noua = int(parts[1])
+        # Reconstruim textul căutat extras direct din interiorul butonului
+        query_text_salvat = "_".join(parts[2:])
+        
+        # Căutăm din nou pe loc, strict pe baza textului scris în buton!
+        results = executa_cautare(query_text_salvat)
 
-    if not date_utilizator:
-        # Dacă sesiunea a expirat sau userul dă click pe butonul altcuiva
-        await query.answer("⚠️ Te rog folosește comanda /cauta din nou pentru sesiunea ta.", show_alert=True)
-        return
-
-    results = date_utilizator["rezultate"]
-    query_text = date_utilizator["text"]
-
-    if query.data.startswith("pag_"):
-        pagina_noua = int(query.data.split("_")[1])
-        text, tastatura = genereaza_pagina_text_si_butoane(results, pagina_noua, query_text)
-        await query.edit_message_text(text, parse_mode="Markdown", disable_web_page_preview=True, reply_markup=tastatura)
+        if results:
+            text, tastatura = genereaza_pagina_text_si_butoane(results, pagina_noua, query_text_salvat)
+            await query.edit_message_text(text, parse_mode="Markdown", disable_web_page_preview=True, reply_markup=tastatura)
 
 async def update_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.document:
