@@ -18,6 +18,19 @@ def load_index():
                 return []
     return []
 
+def curata_text(text):
+    """Înlocuiește caracterele speciale (puncte, cratime, underscore, semne) cu spații pentru o căutare ultra-flexibilă"""
+    if not text:
+        return ""
+    text_lower = text.lower()
+    
+    # Lista de semne speciale pe care le transformăm în spații ca să separăm cuvintele lipite
+    caractere_de_sters = ["_", "-", ".", ",", "&", "/", "\\", "(", ")", "[", "]"]
+    for caracter in caractere_de_sters:
+        text_lower = text_lower.replace(caracter, " ")
+        
+    return text_lower
+
 def genereaza_pagina_text_si_butoane(results, pagina, query_text):
     total_rezultate = len(results)
     start_idx = pagina * CARTI_PER_PAGINA
@@ -58,26 +71,30 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(index, list):
         for item in index:
             if isinstance(item, dict) and "title" in item:
-                book_title = item["title"].lower()
+                # Curățăm titlul din listă înainte de verificare
+                book_title_curat = curata_text(item["title"])
                 msg_id = item.get("id", "0")
-                if all(word in book_title for word in search_words):
+                if all(word in book_title_curat for word in search_words):
                     results.append((item["title"], msg_id))
                     
     elif isinstance(index, dict):
         for msg_id, data in index.items():
             book_title = ""
             if isinstance(data, dict) and "title" in data:
-                book_title = data["title"].lower()
+                book_title = data["title"]
             elif isinstance(data, dict) and "name" in data:
-                book_title = data["name"].lower()
+                book_title = data["name"]
             elif isinstance(data, str):
-                book_title = data.lower()
+                book_title = data
                 
-            if book_title and all(word in book_title for word in search_words):
-                if isinstance(data, dict):
-                    results.append((data.get("title") or data.get("name"), msg_id))
-                else:
-                    results.append((data, msg_id))
+            if book_title:
+                # Curățăm titlul din dicționar înainte de verificare
+                book_title_curat = curata_text(book_title)
+                if all(word in book_title_curat for word in search_words):
+                    if isinstance(data, dict):
+                        results.append((data.get("title") or data.get("name"), msg_id))
+                    else:
+                        results.append((data, msg_id))
 
     if results:
         # Salvăm rezultatele căutării curente în memoria temporară a botului
