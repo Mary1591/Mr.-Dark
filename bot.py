@@ -24,7 +24,6 @@ def curata_text(text):
         return ""
     text_lower = text.lower()
     
-    # Lista de semne speciale pe care le transformăm în spații ca să separăm cuvintele lipite
     caractere_de_sters = ["_", "-", ".", ",", "&", "/", "\\", "(", ")", "[", "]"]
     for caracter in caractere_de_sters:
         text_lower = text_lower.replace(caracter, " ")
@@ -46,7 +45,6 @@ def genereaza_pagina_text_si_butoane(results, pagina, query_text):
         link = f"https://t.me/c/{ID_GRUP_MARE}/{msg_id}"
         text += f"• [{title}]({link})\n"
 
-    # Construim butoanele de navigare pe pagini
     butoane = []
     if pagina > 0:
         butoane.append(InlineKeyboardButton("⬅️ Înapoi", callback_data=f"pag_{pagina-1}"))
@@ -65,7 +63,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query_text = " ".join(context.args)
     
-    # Curățăm textul căutat de fete exact cum curățăm și baza de date!
     query_curatat = curata_text(query_text)
     search_words = [word for word in query_curatat.split() if word]
     
@@ -75,7 +72,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(index, list):
         for item in index:
             if isinstance(item, dict) and "title" in item:
-                # Curățăm titlul din listă înainte de verificare
                 book_title_curat = curata_text(item["title"])
                 msg_id = item.get("id", "0")
                 if all(word in book_title_curat for word in search_words):
@@ -92,7 +88,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 book_title = data
                 
             if book_title:
-                # Curățăm titlul din dicționar înainte de verificare
                 book_title_curat = curata_text(book_title)
                 if all(word in book_title_curat for word in search_words):
                     if isinstance(data, dict):
@@ -101,7 +96,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         results.append((data, msg_id))
 
     if results:
-        # Salvăm rezultatele căutării curente în memoria temporară a botului
         context.user_data["ultimele_rezultate"] = results
         context.user_data["text_cautat"] = query_text
         
@@ -117,14 +111,12 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     results = context.user_data.get("ultimele_rezultate")
     query_text = context.user_data.get("text_cautat", "căutare")
 
-        if not results:
+    if not results:
         return
 
     if query.data.startswith("pag_"):
         pagina_noua = int(query.data.split("_")[1])
         text, tastatura = genereaza_pagina_text_si_butoane(results, pagina_noua, query_text)
-        
-        # Schimbă conținutul mesajului pe loc, fără a trimite un mesaj nou
         await query.edit_message_text(text, parse_mode="Markdown", disable_web_page_preview=True, reply_markup=tastatura)
 
 async def update_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -140,7 +132,7 @@ if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("cauta", search))
     app.add_handler(CommandHandler("update_books", update_db))
-    app.add_handler(CallbackQueryHandler(button_click)) # Linia nouă care dă viață butoanelor
+    app.add_handler(CallbackQueryHandler(button_click))
     
     print("Botul pornește și curăță sesiunile vechi...")
     app.run_polling(drop_pending_updates=True)
