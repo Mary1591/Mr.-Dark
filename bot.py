@@ -72,7 +72,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query_text = " ".join(context.args)
     
-    # Generăm variantele curățate pentru căutare
     query_standard = curata_text_standard(query_text)
     search_words = [word for word in query_standard.split() if word]
     query_complet_legat = curata_text_complet(query_text)
@@ -87,26 +86,22 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title_standard = curata_text_standard(book_title)
         title_complet_legat = curata_text_complet(book_title)
         
-        # Potrivire 1: Dacă textul căutat legat (ex: crjane) se află direct în titlul legat complet
-        if query_complet_legat and query_complet_legat in title_complet_legat:
+        # Dacă fetele caută un grup strict de litere legate (ex: crjane, jrdard)
+        # sau lungimea cuvântului căutat este foarte mică, lăsăm verificarea legată direct
+        if len(query_complet_legat) > 1 and query_complet_legat in title_complet_legat:
+            # Totuși, dacă au căutat "ward", ne asigurăm că nu prinde "edwards" în titlul legat complet
+            # doar dacă "ward" este un cuvânt separat în titlul standard
+            if query_complet_legat == "ward":
+                return bool(re.search(r'\bward\b', title_standard))
             return True
             
-        # Potrivire 2: Verificare cuvinte întregi (evităm potrivirea literelor singure în alte cuvinte)
-        # Folosim regex (\b) pentru a ne asigura că cuvintele/inițialele căutate sunt cuvinte de sine stătătoare în titlu
+        # Altfel, căutăm fiecare cuvânt în parte ca fiind cuvânt ÎNTREG în titlu
         if search_words:
-            match_all_words = True
             for word in search_words:
-                # Dacă e o singură literă (ex: c sau r), verificăm să fie literă de sine stătătoare, nu în interiorul unui cuvânt
-                if len(word) == 1:
-                    if not re.search(r'\b' + re.escape(word) + r'\b', title_standard):
-                        match_all_words = False
-                        break
-                else:
-                    if word not in title_standard:
-                        match_all_words = False
-                        break
-            if match_all_words:
-                return True
+                # Folosim \b pentru a izola cuvântul (să nu fie parte din edward/howard)
+                if not re.search(r'\b' + re.escape(word) + r'\b', title_standard):
+                    return False
+            return True
                 
         return False
 
@@ -135,7 +130,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     results.append((data, msg_id))
 
     if results:
-        # Eliminăm eventualele duplicate din procesare
         rezultate_unice = []
         vazute = set()
         for t, m in results:
