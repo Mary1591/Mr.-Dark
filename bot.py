@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -18,16 +19,24 @@ def load_index():
                 return []
     return []
 
-def curata_text(text):
-    """Înlocuiește caracterele speciale (puncte, cratime, underscore, semne) cu spații pentru o căutare ultra-flexibilă"""
+def curata_text_standard(text):
+    """Curăță caracterele speciale transformându-le în spații"""
     if not text:
         return ""
     text_lower = text.lower()
-    
     caractere_de_sters = ["_", "-", ".", ",", "&", "/", "\\", "(", ")", "[", "]"]
     for caracter in caractere_de_sters:
         text_lower = text_lower.replace(caracter, " ")
-        
+    return text_lower
+
+def curata_text_complet(text):
+    """Șterge complet punctele și spațiile pentru a potrivi inițialele lipite (ex: c.r.jane devine crjane)"""
+    if not text:
+        return ""
+    text_lower = text.lower()
+    caractere_de_sters = ["_", "-", ".", ",", "&", "/", "\\", "(", ")", "[", "]", " "]
+    for caracter in caractere_de_sters:
+        text_lower = text_lower.replace(caracter, "")
     return text_lower
 
 def genereaza_pagina_text_si_butoane(results, pagina, query_text):
@@ -63,19 +72,51 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query_text = " ".join(context.args)
     
-    query_curatat = curata_text(query_text)
-    search_words = [word for word in query_curatat.split() if word]
+    # Generăm variantele curățate pentru căutare
+    query_standard = curata_text_standard(query_text)
+    search_words = [word for word in query_standard.split() if word]
+    query_complet_legat = curata_text_complet(query_text)
     
     index = load_index()
     results = []
 
+    def se_potriveste(book_title):
+        if not book_title:
+            return False
+        
+        title_standard = curata_text_standard(book_title)
+        title_complet_legat = curata_text_complet(book_title)
+        
+        # Potrivire 1: Dacă textul căutat legat (ex: crjane) se află direct în titlul legat complet
+        if query_complet_legat and query_complet_legat in title_complet_legat:
+            return True
+            
+        # Potrivire 2: Verificare cuvinte întregi (evităm potrivirea literelor singure în alte cuvinte)
+        # Folosim regex (\b) pentru a ne asigura că cuvintele/inițialele căutate sunt cuvinte de sine stătătoare în titlu
+        if search_words:
+            match_all_words = True
+            for word in search_words:
+                # Dacă e o singură literă (ex: c sau r), verificăm să fie literă de sine stătătoare, nu în interiorul unui cuvânt
+                if len(word) == 1:
+                    if not re.search(r'\b' + re.escape(word) + r'\b', title_standard):
+                        match_all_words = False
+                        break
+                else:
+                    if word not in title_standard:
+                        match_all_words = False
+                        break
+            if match_all_words:
+                return True
+                
+        return False
+
     if isinstance(index, list):
         for item in index:
             if isinstance(item, dict) and "title" in item:
-                book_title_curat = curata_text(item["title"])
+                title_original = item["title"]
                 msg_id = item.get("id", "0")
-                if all(word in book_title_curat for word in search_words):
-                    results.append((item["title"], msg_id))
+                if se_potriveste(title_original):
+                    results.append((title_original, msg_id))
                     
     elif isinstance(index, dict):
         for msg_id, data in index.items():
@@ -87,19 +128,25 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif isinstance(data, str):
                 book_title = data
                 
-            if book_title:
-                book_title_curat = curata_text(book_title)
-                if all(word in book_title_curat for word in search_words):
-                    if isinstance(data, dict):
-                        results.append((data.get("title") or data.get("name"), msg_id))
-                    else:
-                        results.append((data, msg_id))
+            if book_title and se_potriveste(book_title):
+                if isinstance(data, dict):
+                    results.append((data.get("title") or data.get("name"), msg_id))
+                else:
+                    results.append((data, msg_id))
 
     if results:
-        context.user_data["ultimele_rezultate"] = results
+        # Eliminăm eventualele duplicate din procesare
+        rezultate_unice = []
+        vazute = set()
+        for t, m in results:
+            if m not in vazute:
+                vazute.add(m)
+                rezultate_unice.append((t, m))
+
+        context.user_data["ultimele_rezultate"] = rezultate_unice
         context.user_data["text_cautat"] = query_text
         
-        text, tastatura = genereaza_pagina_text_si_butoane(results, 0, query_text)
+        text, tastatura = genereaza_pagina_text_si_butoane(rezultate_unice, 0, query_text)
         await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True, reply_markup=tastatura)
     else:
         await update.message.reply_text(f"❌ Nu am găsit nicio carte care să conțină „{query_text}” în bibliotecă.")
