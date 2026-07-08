@@ -64,7 +64,12 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     query_text = " ".join(context.args)
-    search_words = [word.lower() for word in context.args]
+    
+    # MODIFICARE CHEIE: Curățăm textul căutat de fete exact cum curățăm și baza de date!
+    # Dacă scriu "K.M. Moronova", query_curatat devine "k m moronova", iar search_words devine ['k', 'm', 'moronova']
+    query_curatat = curata_text(query_text)
+    search_words = [word for word in query_curatat.split() if word]
+    
     index = load_index()
     results = []
 
@@ -113,7 +118,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     results = context.user_data.get("ultimele_rezultate")
     query_text = context.user_data.get("text_cautat", "căutare")
 
-    if not results:
+    if not delete_results := results:
         return
 
     if query.data.startswith("pag_"):
