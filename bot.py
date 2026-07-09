@@ -26,7 +26,8 @@ def curata_text_standard(text):
     caractere_de_sters = ["_", "-", ".", ",", "&", "/", "\\", "(", ")", "[", "]"]
     for caracter in caractere_de_sters:
         text_lower = text_lower.replace(caracter, " ")
-    return text_lower
+    # Curățăm și spațiile multiple ca să lăsăm doar un spațiu simplu între cuvinte
+    return " ".join(text_lower.split())
 
 def curata_text_complet(text):
     if not text:
@@ -40,7 +41,6 @@ def curata_text_complet(text):
 def executa_cautare(query_text):
     """Funcție separată care caută în baza de date pe loc, de fiecare dată când se schimbă pagina"""
     query_standard = curata_text_standard(query_text)
-    search_words = [word for word in query_standard.split() if word]
     query_complet_legat = curata_text_complet(query_text)
     
     index = load_index()
@@ -53,16 +53,19 @@ def executa_cautare(query_text):
         title_standard = curata_text_standard(book_title)
         title_complet_legat = curata_text_complet(book_title)
         
+        # 1. Verificare pentru inițiale lipite (ex: crjane sau km_moronova)
         if len(query_complet_legat) > 1 and query_complet_legat in title_complet_legat:
             if query_complet_legat == "ward":
                 return bool(re.search(r'\bward\b', title_standard))
             return True
             
-        if search_words:
-            for word in search_words:
-                if not re.search(r'\b' + re.escape(word) + r'\b', title_standard):
-                    return False
-            return True
+        # 2. MODIFICARE CONCRETĂ: Căutăm cuvintele exact în ordinea scrisă de utilizator (ex: "ivy king")
+        if query_standard:
+            cuvinte = query_standard.split()
+            # Cream un tipar regex care caută cuvintele unul după altul, izolate ca și cuvinte întregi (\b)
+            tipar_regex = r'\b' + r'\s+'.join(re.escape(w) for w in cuvinte) + r'\b'
+            if re.search(tipar_regex, title_standard):
+                return True
                 
         return False
 
@@ -114,12 +117,10 @@ def genereaza_pagina_text_si_butoane(results, pagina, query_text):
         link = f"https://t.me/c/{ID_GRUP_MARE}/{msg_id}"
         text += f"• [{title}]({link})\n"
 
-    # Limităm textul salvat în buton ca să nu depășească limita Telegram (max 64 caractere în callback_data)
     query_scurtat = query_text[:30]
 
     butoane = []
     if pagina > 0:
-        # Salvăm pagina și textul căutat direct în buton! zero memorie volatilă
         butoane.append(InlineKeyboardButton("⬅️ Înapoi", callback_data=f"pag_{pagina-1}_{query_scurtat}"))
     if end_idx < total_rezultate:
         butoane.append(InlineKeyboardButton("Înainte ➡️", callback_data=f"pag_{pagina+1}_{query_scurtat}"))
@@ -150,15 +151,12 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     await query.answer()
 
-    # Despicăm comanda butonului: ex. pag_1_ward
     parts = query.data.split("_")
     
     if len(parts) >= 3 and parts[0] == "pag":
         pagina_noua = int(parts[1])
-        # Reconstruim textul căutat extras direct din interiorul butonului
         query_text_salvat = "_".join(parts[2:])
         
-        # Căutăm din nou pe loc, strict pe baza textului scris în buton!
         results = executa_cautare(query_text_salvat)
 
         if results:
